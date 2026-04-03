@@ -34,9 +34,11 @@ def create_app():
     from .routes.scan import scan_bp
     from .routes.list import list_bp
     from .routes.auth import auth_bp
+    from .routes.product import product_bp
 
     app.register_blueprint(scan_bp)
     app.register_blueprint(list_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(product_bp)
 
     return app

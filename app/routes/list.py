@@ -3,12 +3,15 @@ from app.services.list_service import create_list, get_all_lists, update_list_it
 
 from app.models import List
 
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from flask import send_file
+
+
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph, PageBreak
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
-from flask import send_file
 import io
+from app.utils.helpers import barcode_drawing
 
 
 
@@ -60,57 +63,55 @@ def export_list_pdf(list_id):
         return {"error": "List not found"}, 404
 
     buffer = io.BytesIO()
-
-    # Create PDF document
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     elements = []
-
     styles = getSampleStyleSheet()
 
-    # 🔹 Title
-    title = Paragraph(f"<b>Product List: {list_obj.name}</b>", styles["Title"])
-    elements.append(title)
+    # Title
+    elements.append(Paragraph(f"<b>Product List: {list_obj.name}</b>", styles["Title"]))
     elements.append(Spacer(1, 20))
 
-    # 🔹 Table data (header + rows)
-    data = [
-        ["Product Name", "Barcode", "Quantity", "Added By"]
-    ]
+    items = list_obj.items
+    chunk_size = 40
 
-    for item in list_obj.items:
-        data.append([
-            item.product.name,
-            item.product.barcode,
-            str(item.quantity),
-            item.user.username if item.user else "N/A"
-        ])
+    for i in range(0, len(items), chunk_size):
+        chunk = items[i:i + chunk_size]
 
-    # 🔹 Create table
-    table = Table(data, colWidths=[150, 150, 80, 120])
+        # Header
+        data = [["#", "Product Name", "Barcode", "Qty", "Added By", "Scan Code"]]
 
-    # 🔹 Styling
-    table.setStyle(TableStyle([
-        # Header style
-        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        for idx, item in enumerate(chunk, start=i + 1):
+            barcode_img = barcode_drawing(value=item.product.barcode)
+            data.append([
+                str(idx),
+                item.product.name,
+                item.product.barcode,
+                str(item.quantity),
+                item.user.username if item.user else "N/A",
+                barcode_img
+            ])
 
-        # Body style
-        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-        ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+        table = Table(data, colWidths=[30, 140, 100, 30, 150])
 
-        # Grid lines (borders)
-        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
 
-        # Padding
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-    ]))
+            ("GRID", (0, 0), (-1, -1), 1, colors.black),
 
-    elements.append(table)
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("ALIGN", (1, 1), (1, -1), "LEFT"),
 
-    # Build PDF
+            ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+        ]))
+
+        elements.append(table)
+
+        # Add page break if more items remain
+        if i + chunk_size < len(items):
+            elements.append(PageBreak())
+
     doc.build(elements)
 
     buffer.seek(0)

@@ -18,7 +18,7 @@ class ListItem(db.Model):
 
     # Relationships
     list = db.relationship("List", back_populates="items")
-    product = db.relationship("Product")
+    product = db.relationship("Product", back_populates="list_items")
     user = db.relationship("User")
 
     __table_args__ = (

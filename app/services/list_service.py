@@ -81,3 +81,22 @@ def update_list_item_quantity(list_item_id, quantity):
         "product_id": item.product_id,
         "quantity": item.quantity
     }, 200
+
+
+def delete_list_item(list_id, product_id):
+    item = ListItem.query.filter_by(
+        list_id=list_id,
+        product_id=product_id
+    ).first()
+
+    if not item:
+        return {"error": "Item not found in this list"}, 404
+
+    db.session.delete(item)
+    db.session.commit()
+
+    return {
+        "message": "Product removed from list",
+        "product_id": product_id,
+        "list_id": list_id
+    }, 200

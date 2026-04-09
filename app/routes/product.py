@@ -1,11 +1,15 @@
 from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models.product import Product
+from sqlalchemy import or_
+from flask_jwt_extended import jwt_required
+
 
 product_bp = Blueprint("product", __name__)
 
 
 @product_bp.route("/products", methods=["POST"])
+@jwt_required()
 def create_product():
     data = request.get_json()
 
@@ -31,6 +35,7 @@ def create_product():
 
 
 @product_bp.route("/products/<int:product_id>", methods=["PUT"])
+@jwt_required()
 def update_product(product_id):
     data = request.get_json()
 
@@ -61,15 +66,29 @@ def update_product(product_id):
 
 
 @product_bp.route("/products", methods=["GET"])
+@jwt_required()
 def get_products():
     search = request.args.get("search", "")
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 20))
 
     query = Product.query
 
     if search:
-        query = query.filter(Product.name.ilike(f"%{search}%"))
+        query = query.filter(
+            or_(
+                Product.name.ilike(f"%{search}%"),
+                Product.barcode.ilike(f"%{search}%")
+            )
+        )
 
-    products = query.order_by(Product.id.desc()).all()
+    pagination = query.order_by(Product.id.desc()).paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False
+    )
+
+    products = pagination.items
 
     return {
         "products": [
@@ -79,5 +98,31 @@ def get_products():
                 "barcode": p.barcode
             }
             for p in products
-        ]
+        ],
+        "pagination": {
+            "page": pagination.page,
+            "per_page": pagination.per_page,
+            "total": pagination.total,
+            "pages": pagination.pages
+        }
     }
+
+
+@product_bp.route("/products/<int:product_id>", methods=["DELETE"])
+@jwt_required()
+def delete_product(product_id):
+    product = Product.query.get(product_id)
+
+    if not product:
+        return {"error": "Product not found"}, 404
+
+    # Optional: check if product is used in any list
+    if product.list_items:
+        return {
+            "error": "Cannot delete product. It is used in lists."
+        }, 400
+
+    db.session.delete(product)
+    db.session.commit()
+
+    return {"message": "Product deleted successfully"}, 200
